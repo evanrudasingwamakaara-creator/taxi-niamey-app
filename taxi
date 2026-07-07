@@ -1,0 +1,494 @@
+import { useState, useEffect } from "react";
+
+const QUARTIERS = [
+  "Plateau", "Yantala", "Lazaret", "Gamkalley", "Goudel",
+  "Koira Tegui", "Talladjé", "Boukoki", "Pays-Bas", "Terminus",
+  "Banifandou", "Kirkissoye", "Aéroport", "Université", "Grand Marché",
+  "Hôpital National", "Stade Général Seyni Kountché"
+];
+
+const VEHICULES = [
+  { id: "moto", label: "Moto-taxi", icon: "🛵", prix: 500, temps: "5-10 min" },
+  { id: "taxi", label: "Taxi Standard", icon: "🚕", prix: 1000, temps: "8-15 min" },
+  { id: "confort", label: "Taxi Confort", icon: "🚗", prix: 1800, temps: "8-15 min" },
+  { id: "vip", label: "VIP / Climatisé", icon: "🚙", prix: 3000, temps: "10-20 min" },
+];
+
+const CHAUFFEURS = [
+  { id: 1, nom: "Moussa Adamou", note: 4.9, courses: 832, avatar: "MA", tel: "+227 90 12 34 56" },
+  { id: 2, nom: "Ibrahim Maïga", note: 4.7, courses: 614, avatar: "IM", tel: "+227 96 78 90 12" },
+  { id: 3, nom: "Fatima Souley", note: 4.8, courses: 445, avatar: "FS", tel: "+227 93 45 67 89" },
+];
+
+const ETAPES = ["Trajet", "Véhicule", "Confirmation", "Suivi"];
+
+function StarRating({ note }) {
+  return (
+    <span style={{ color: "#F59E0B", fontSize: "12px" }}>
+      {"★".repeat(Math.floor(note))}{"☆".repeat(5 - Math.floor(note))} {note}
+    </span>
+  );
+}
+
+function ProgressBar({ etape }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 0, marginBottom: "32px" }}>
+      {ETAPES.map((e, i) => (
+        <div key={e} style={{ display: "flex", alignItems: "center", flex: i < ETAPES.length - 1 ? 1 : 0 }}>
+          <div style={{
+            display: "flex", flexDirection: "column", alignItems: "center", gap: "6px"
+          }}>
+            <div style={{
+              width: "36px", height: "36px", borderRadius: "50%",
+              background: i <= etape ? "linear-gradient(135deg, #F59E0B, #EF4444)" : "rgba(255,255,255,0.1)",
+              border: i === etape ? "3px solid #FDE68A" : "2px solid transparent",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: i <= etape ? "#fff" : "rgba(255,255,255,0.3)",
+              fontWeight: "700", fontSize: "14px",
+              boxShadow: i === etape ? "0 0 16px rgba(245,158,11,0.6)" : "none",
+              transition: "all 0.3s ease"
+            }}>
+              {i < etape ? "✓" : i + 1}
+            </div>
+            <span style={{
+              fontSize: "11px", color: i <= etape ? "#FDE68A" : "rgba(255,255,255,0.3)",
+              fontWeight: i === etape ? "700" : "400", whiteSpace: "nowrap"
+            }}>{e}</span>
+          </div>
+          {i < ETAPES.length - 1 && (
+            <div style={{
+              flex: 1, height: "2px", margin: "0 8px", marginBottom: "18px",
+              background: i < etape ? "linear-gradient(90deg, #F59E0B, #EF4444)" : "rgba(255,255,255,0.1)"
+            }} />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SelectField({ label, value, onChange, options, placeholder, icon }) {
+  return (
+    <div style={{ marginBottom: "16px" }}>
+      <label style={{ display: "block", fontSize: "12px", color: "#FDE68A", fontWeight: "600", marginBottom: "6px", letterSpacing: "0.05em" }}>
+        {icon} {label}
+      </label>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        style={{
+          width: "100%", padding: "12px 16px", borderRadius: "12px",
+          background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)",
+          color: value ? "#fff" : "rgba(255,255,255,0.4)", fontSize: "14px",
+          outline: "none", cursor: "pointer", appearance: "none",
+          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23F59E0B' stroke-width='2' fill='none'/%3E%3C/svg%3E")`,
+          backgroundRepeat: "no-repeat", backgroundPosition: "right 14px center"
+        }}
+      >
+        <option value="" style={{ background: "#1a1a2e" }}>{placeholder}</option>
+        {options.map(q => (
+          <option key={q} value={q} style={{ background: "#1a1a2e" }}>{q}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+export default function TaxiNiamey() {
+  const [etape, setEtape] = useState(0);
+  const [depart, setDepart] = useState("");
+  const [arrivee, setArrivee] = useState("");
+  const [vehicule, setVehicule] = useState("");
+  const [chauffeur, setChauffeur] = useState(null);
+  const [paiement, setPaiement] = useState("cash");
+  const [confirme, setConfirme] = useState(false);
+  const [suivi, setSuivi] = useState(0);
+  const [tel, setTel] = useState("");
+  const [heure, setHeure] = useState("maintenant");
+  const [time, setTime] = useState(new Date());
+
+  useEffect(() => {
+    const t = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    if (confirme) {
+      const statuts = ["Recherche d'un chauffeur...", "Chauffeur trouvé !", "En route vers vous", "Arrivé !"];
+      let i = 0;
+      const t = setInterval(() => {
+        i++;
+        setSuivi(i);
+        if (i >= statuts.length - 1) clearInterval(t);
+      }, 2500);
+      return () => clearInterval(t);
+    }
+  }, [confirme]);
+
+  const prixVehicule = VEHICULES.find(v => v.id === vehicule);
+  const chauffeurInfo = CHAUFFEURS.find(c => c.id === chauffeur);
+
+  const suiviStatuts = [
+    { label: "Recherche en cours", icon: "🔍", color: "#F59E0B" },
+    { label: "Chauffeur assigné", icon: "✅", color: "#10B981" },
+    { label: "En route vers vous", icon: "🚕", color: "#3B82F6" },
+    { label: "Arrivé !", icon: "🎉", color: "#8B5CF6" },
+  ];
+
+  return (
+    <div style={{
+      minHeight: "100vh", background: "linear-gradient(160deg, #0f0c29 0%, #1a1a3e 40%, #24243e 100%)",
+      fontFamily: "'Trebuchet MS', 'Segoe UI', sans-serif", color: "#fff",
+      position: "relative", overflow: "hidden"
+    }}>
+      {/* Background décor */}
+      <div style={{
+        position: "fixed", top: "-200px", right: "-200px", width: "600px", height: "600px",
+        borderRadius: "50%", background: "radial-gradient(circle, rgba(245,158,11,0.08) 0%, transparent 70%)",
+        pointerEvents: "none"
+      }} />
+      <div style={{
+        position: "fixed", bottom: "-150px", left: "-150px", width: "400px", height: "400px",
+        borderRadius: "50%", background: "radial-gradient(circle, rgba(239,68,68,0.06) 0%, transparent 70%)",
+        pointerEvents: "none"
+      }} />
+
+      {/* Header */}
+      <header style={{
+        padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center",
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
+        background: "rgba(0,0,0,0.2)", backdropFilter: "blur(10px)",
+        position: "sticky", top: 0, zIndex: 100
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <div style={{
+            width: "40px", height: "40px", borderRadius: "12px",
+            background: "linear-gradient(135deg, #F59E0B, #EF4444)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: "20px", boxShadow: "0 4px 16px rgba(245,158,11,0.4)"
+          }}>🚕</div>
+          <div>
+            <div style={{ fontWeight: "800", fontSize: "18px", letterSpacing: "0.02em" }}>
+              Taxi <span style={{ color: "#F59E0B" }}>Niamey</span>
+            </div>
+            <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", marginTop: "-2px" }}>
+              Rapide · Fiable · Local
+            </div>
+          </div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: "14px", fontWeight: "600", color: "#FDE68A" }}>
+            {time.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+          </div>
+          <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)" }}>
+            {time.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}
+          </div>
+        </div>
+      </header>
+
+      <main style={{ maxWidth: "480px", margin: "0 auto", padding: "24px 16px" }}>
+
+        {/* Titre */}
+        <div style={{ textAlign: "center", marginBottom: "28px" }}>
+          <h1 style={{ fontSize: "26px", fontWeight: "800", margin: "0 0 6px 0", letterSpacing: "-0.02em" }}>
+            Réservez votre taxi
+          </h1>
+          <p style={{ color: "rgba(255,255,255,0.45)", fontSize: "13px", margin: 0 }}>
+            Service disponible 24h/24 dans tout Niamey
+          </p>
+        </div>
+
+        <ProgressBar etape={etape} />
+
+        {/* ETAPE 0 : Trajet */}
+        {etape === 0 && (
+          <div style={{
+            background: "rgba(255,255,255,0.05)", borderRadius: "20px", padding: "24px",
+            border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(10px)"
+          }}>
+            <SelectField label="Point de départ" value={depart} onChange={setDepart}
+              options={QUARTIERS} placeholder="Choisir le quartier de départ" icon="📍" />
+            <SelectField label="Destination" value={arrivee} onChange={setArrivee}
+              options={QUARTIERS.filter(q => q !== depart)} placeholder="Choisir la destination" icon="🏁" />
+
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ display: "block", fontSize: "12px", color: "#FDE68A", fontWeight: "600", marginBottom: "6px", letterSpacing: "0.05em" }}>
+                📱 Numéro de téléphone
+              </label>
+              <input
+                type="tel" value={tel} onChange={e => setTel(e.target.value)}
+                placeholder="+227 XX XX XX XX"
+                style={{
+                  width: "100%", padding: "12px 16px", borderRadius: "12px",
+                  background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)",
+                  color: "#fff", fontSize: "14px", outline: "none", boxSizing: "border-box"
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", fontSize: "12px", color: "#FDE68A", fontWeight: "600", marginBottom: "10px", letterSpacing: "0.05em" }}>
+                🕐 Heure de départ
+              </label>
+              <div style={{ display: "flex", gap: "8px" }}>
+                {["maintenant", "planifier"].map(opt => (
+                  <button key={opt} onClick={() => setHeure(opt)} style={{
+                    flex: 1, padding: "10px", borderRadius: "10px", border: "none", cursor: "pointer",
+                    background: heure === opt ? "linear-gradient(135deg, #F59E0B, #EF4444)" : "rgba(255,255,255,0.08)",
+                    color: "#fff", fontWeight: "600", fontSize: "13px", transition: "all 0.2s"
+                  }}>
+                    {opt === "maintenant" ? "⚡ Maintenant" : "📅 Planifier"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              onClick={() => depart && arrivee && tel && setEtape(1)}
+              style={{
+                width: "100%", padding: "14px", borderRadius: "14px", border: "none",
+                background: depart && arrivee && tel
+                  ? "linear-gradient(135deg, #F59E0B, #EF4444)"
+                  : "rgba(255,255,255,0.1)",
+                color: "#fff", fontWeight: "700", fontSize: "15px", cursor: depart && arrivee && tel ? "pointer" : "not-allowed",
+                boxShadow: depart && arrivee && tel ? "0 6px 24px rgba(245,158,11,0.35)" : "none",
+                transition: "all 0.3s"
+              }}
+            >
+              Continuer →
+            </button>
+          </div>
+        )}
+
+        {/* ETAPE 1 : Véhicule */}
+        {etape === 1 && (
+          <div>
+            <div style={{ marginBottom: "20px", padding: "14px 18px", borderRadius: "14px", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.2)" }}>
+              <div style={{ fontSize: "12px", color: "#FDE68A", marginBottom: "4px" }}>Votre trajet</div>
+              <div style={{ fontWeight: "700", fontSize: "15px" }}>{depart} → {arrivee}</div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "20px" }}>
+              {VEHICULES.map(v => (
+                <div key={v.id} onClick={() => setVehicule(v.id)} style={{
+                  padding: "16px 20px", borderRadius: "16px", cursor: "pointer",
+                  background: vehicule === v.id ? "rgba(245,158,11,0.15)" : "rgba(255,255,255,0.05)",
+                  border: vehicule === v.id ? "2px solid #F59E0B" : "2px solid rgba(255,255,255,0.08)",
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  transition: "all 0.2s",
+                  boxShadow: vehicule === v.id ? "0 4px 20px rgba(245,158,11,0.2)" : "none"
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                    <span style={{ fontSize: "28px" }}>{v.icon}</span>
+                    <div>
+                      <div style={{ fontWeight: "700", fontSize: "14px" }}>{v.label}</div>
+                      <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.45)" }}>⏱ {v.temps}</div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontWeight: "800", color: "#F59E0B", fontSize: "16px" }}>{v.prix.toLocaleString()} FCFA</div>
+                    {vehicule === v.id && <div style={{ fontSize: "11px", color: "#10B981" }}>✓ Sélectionné</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button onClick={() => setEtape(0)} style={{
+                flex: 1, padding: "13px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.15)",
+                background: "transparent", color: "#fff", fontWeight: "600", cursor: "pointer", fontSize: "14px"
+              }}>← Retour</button>
+              <button onClick={() => vehicule && setEtape(2)} style={{
+                flex: 2, padding: "13px", borderRadius: "12px", border: "none",
+                background: vehicule ? "linear-gradient(135deg, #F59E0B, #EF4444)" : "rgba(255,255,255,0.1)",
+                color: "#fff", fontWeight: "700", cursor: vehicule ? "pointer" : "not-allowed", fontSize: "14px",
+                boxShadow: vehicule ? "0 6px 20px rgba(245,158,11,0.35)" : "none"
+              }}>Continuer →</button>
+            </div>
+          </div>
+        )}
+
+        {/* ETAPE 2 : Confirmation */}
+        {etape === 2 && (
+          <div>
+            {/* Résumé */}
+            <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: "18px", padding: "20px", marginBottom: "16px", border: "1px solid rgba(255,255,255,0.08)" }}>
+              <div style={{ fontWeight: "700", fontSize: "13px", color: "#FDE68A", marginBottom: "14px", letterSpacing: "0.05em" }}>RÉSUMÉ DE LA COURSE</div>
+              {[
+                ["📍 Départ", depart],
+                ["🏁 Arrivée", arrivee],
+                ["🚕 Véhicule", prixVehicule?.label],
+                ["📱 Téléphone", tel],
+                ["💰 Prix estimé", `${prixVehicule?.prix.toLocaleString()} FCFA`]
+              ].map(([k, v]) => (
+                <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.05)", fontSize: "14px" }}>
+                  <span style={{ color: "rgba(255,255,255,0.5)" }}>{k}</span>
+                  <span style={{ fontWeight: "600", color: k.includes("Prix") ? "#F59E0B" : "#fff" }}>{v}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Choisir chauffeur */}
+            <div style={{ marginBottom: "16px" }}>
+              <div style={{ fontWeight: "700", fontSize: "13px", color: "#FDE68A", marginBottom: "12px", letterSpacing: "0.05em" }}>CHOISIR UN CHAUFFEUR</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                {CHAUFFEURS.map(c => (
+                  <div key={c.id} onClick={() => setChauffeur(c.id)} style={{
+                    padding: "14px 16px", borderRadius: "14px", cursor: "pointer",
+                    background: chauffeur === c.id ? "rgba(245,158,11,0.12)" : "rgba(255,255,255,0.04)",
+                    border: chauffeur === c.id ? "2px solid #F59E0B" : "2px solid rgba(255,255,255,0.07)",
+                    display: "flex", alignItems: "center", gap: "14px", transition: "all 0.2s"
+                  }}>
+                    <div style={{
+                      width: "44px", height: "44px", borderRadius: "50%", flexShrink: 0,
+                      background: "linear-gradient(135deg, #F59E0B, #EF4444)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontWeight: "800", fontSize: "14px"
+                    }}>{c.avatar}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: "700", fontSize: "14px", marginBottom: "3px" }}>{c.nom}</div>
+                      <StarRating note={c.note} />
+                      <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", marginTop: "2px" }}>{c.courses} courses effectuées</div>
+                    </div>
+                    {chauffeur === c.id && <span style={{ color: "#10B981", fontSize: "18px" }}>✓</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Paiement */}
+            <div style={{ marginBottom: "20px" }}>
+              <div style={{ fontWeight: "700", fontSize: "13px", color: "#FDE68A", marginBottom: "12px", letterSpacing: "0.05em" }}>MODE DE PAIEMENT</div>
+              <div style={{ display: "flex", gap: "10px" }}>
+                {[
+                  { id: "cash", label: "💵 Espèces" },
+                  { id: "orange", label: "🟠 Orange Money" },
+                  { id: "airtel", label: "🔴 Airtel Money" }
+                ].map(p => (
+                  <button key={p.id} onClick={() => setPaiement(p.id)} style={{
+                    flex: 1, padding: "10px 8px", borderRadius: "10px", border: "none", cursor: "pointer",
+                    background: paiement === p.id ? "linear-gradient(135deg, #F59E0B, #EF4444)" : "rgba(255,255,255,0.07)",
+                    color: "#fff", fontWeight: paiement === p.id ? "700" : "500", fontSize: "12px"
+                  }}>{p.label}</button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button onClick={() => setEtape(1)} style={{
+                flex: 1, padding: "13px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.15)",
+                background: "transparent", color: "#fff", fontWeight: "600", cursor: "pointer"
+              }}>← Retour</button>
+              <button onClick={() => { if (chauffeur) { setConfirme(true); setEtape(3); } }} style={{
+                flex: 2, padding: "13px", borderRadius: "12px", border: "none",
+                background: chauffeur ? "linear-gradient(135deg, #F59E0B, #EF4444)" : "rgba(255,255,255,0.1)",
+                color: "#fff", fontWeight: "700", cursor: chauffeur ? "pointer" : "not-allowed", fontSize: "14px",
+                boxShadow: chauffeur ? "0 6px 20px rgba(245,158,11,0.4)" : "none"
+              }}>🚕 Confirmer la course</button>
+            </div>
+          </div>
+        )}
+
+        {/* ETAPE 3 : Suivi */}
+        {etape === 3 && (
+          <div>
+            <div style={{ textAlign: "center", marginBottom: "28px" }}>
+              <div style={{ fontSize: "56px", marginBottom: "12px", animation: "pulse 1.5s infinite" }}>
+                {suiviStatuts[Math.min(suivi, 3)].icon}
+              </div>
+              <div style={{ fontWeight: "800", fontSize: "20px", color: suiviStatuts[Math.min(suivi, 3)].color }}>
+                {suiviStatuts[Math.min(suivi, 3)].label}
+              </div>
+            </div>
+
+            {/* Statuts */}
+            <div style={{ marginBottom: "24px", display: "flex", flexDirection: "column", gap: "10px" }}>
+              {suiviStatuts.map((s, i) => (
+                <div key={i} style={{
+                  display: "flex", alignItems: "center", gap: "14px", padding: "12px 16px",
+                  borderRadius: "12px", background: i <= suivi ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.02)",
+                  border: `1px solid ${i === suivi ? s.color + "66" : "transparent"}`,
+                  opacity: i > suivi ? 0.35 : 1, transition: "all 0.4s"
+                }}>
+                  <div style={{
+                    width: "32px", height: "32px", borderRadius: "50%", flexShrink: 0,
+                    background: i <= suivi ? s.color : "rgba(255,255,255,0.1)",
+                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px"
+                  }}>{i < suivi ? "✓" : s.icon}</div>
+                  <span style={{ fontWeight: i === suivi ? "700" : "500", fontSize: "14px" }}>{s.label}</span>
+                  {i === suivi && suivi < 3 && (
+                    <div style={{ marginLeft: "auto", display: "flex", gap: "4px" }}>
+                      {[0, 1, 2].map(d => (
+                        <div key={d} style={{
+                          width: "6px", height: "6px", borderRadius: "50%", background: s.color,
+                          animation: `bounce ${0.6 + d * 0.2}s infinite alternate`
+                        }} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Chauffeur info */}
+            {chauffeurInfo && (
+              <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: "16px", padding: "18px", marginBottom: "20px", border: "1px solid rgba(255,255,255,0.08)" }}>
+                <div style={{ fontWeight: "700", fontSize: "12px", color: "#FDE68A", marginBottom: "12px", letterSpacing: "0.05em" }}>VOTRE CHAUFFEUR</div>
+                <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                  <div style={{
+                    width: "50px", height: "50px", borderRadius: "50%", background: "linear-gradient(135deg, #F59E0B, #EF4444)",
+                    display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "800", fontSize: "16px"
+                  }}>{chauffeurInfo.avatar}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: "700", fontSize: "15px" }}>{chauffeurInfo.nom}</div>
+                    <StarRating note={chauffeurInfo.note} />
+                  </div>
+                  <a href={`tel:${chauffeurInfo.tel}`} style={{
+                    padding: "10px 14px", borderRadius: "10px", background: "linear-gradient(135deg, #10B981, #059669)",
+                    color: "#fff", fontWeight: "700", fontSize: "13px", textDecoration: "none",
+                    boxShadow: "0 4px 14px rgba(16,185,129,0.35)"
+                  }}>📞 Appeler</a>
+                </div>
+              </div>
+            )}
+
+            {/* Résumé final */}
+            <div style={{ padding: "16px", borderRadius: "14px", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.2)", marginBottom: "20px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "14px" }}>
+                <span style={{ color: "rgba(255,255,255,0.6)" }}>Trajet</span>
+                <span style={{ fontWeight: "600" }}>{depart} → {arrivee}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "14px", marginTop: "8px" }}>
+                <span style={{ color: "rgba(255,255,255,0.6)" }}>Montant total</span>
+                <span style={{ fontWeight: "800", color: "#F59E0B", fontSize: "16px" }}>{prixVehicule?.prix.toLocaleString()} FCFA</span>
+              </div>
+            </div>
+
+            {suivi >= 3 && (
+              <button onClick={() => { setEtape(0); setDepart(""); setArrivee(""); setVehicule(""); setChauffeur(null); setConfirme(false); setSuivi(0); setTel(""); }} style={{
+                width: "100%", padding: "14px", borderRadius: "14px", border: "none",
+                background: "linear-gradient(135deg, #F59E0B, #EF4444)",
+                color: "#fff", fontWeight: "700", fontSize: "15px", cursor: "pointer",
+                boxShadow: "0 6px 24px rgba(245,158,11,0.4)"
+              }}>🚕 Nouvelle réservation</button>
+            )}
+          </div>
+        )}
+
+      </main>
+
+      {/* Footer */}
+      <footer style={{ textAlign: "center", padding: "20px", color: "rgba(255,255,255,0.2)", fontSize: "12px" }}>
+        🚕 Taxi Niamey • Service 24h/24 — 7j/7
+      </footer>
+
+      <style>{`
+        @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+        @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-6px); } }
+        select option { color: #fff; background: #1a1a2e; }
+        input::placeholder { color: rgba(255,255,255,0.3); }
+        * { box-sizing: border-box; }
+      `}</style>
+    </div>
+  );
+}
