@@ -6,7 +6,6 @@ const QUARTIERS = [
   "Banifandou", "Kirkissoye", "Aéroport", "Université", "Grand Marché",
   "Hôpital National", "Stade Général Seyni Kountché"
 ];
-
 const VEHICULES = [
   { id: "moto", label: "Moto-taxi", icon: "🛵", prix: 500, temps: "5-10 min" },
   { id: "taxi", label: "Taxi Standard", icon: "🚕", prix: 1000, temps: "8-15 min" },
